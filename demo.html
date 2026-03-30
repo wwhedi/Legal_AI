@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Legal AI Agent Demo UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              panel: "#0b1220",
+              panel2: "#0f172a",
+              ink: "#e2e8f0",
+              stroke: "#243244",
+            },
+            keyframes: {
+              rise: { "0%": { opacity: "0", transform: "translateY(10px)" }, "100%": { opacity: "1", transform: "translateY(0)" } },
+              softPulse: { "0%, 100%": { transform: "scale(1)", opacity: "0.55" }, "50%": { transform: "scale(1.12)", opacity: "1" } },
+              pingRing: { "0%": { transform: "scale(0.65)", opacity: "0.0" }, "25%": { opacity: "0.8" }, "100%": { transform: "scale(2.15)", opacity: "0" } },
+              pop: { "0%": { opacity: "0", transform: "scale(0.98) translateY(6px)" }, "100%": { opacity: "1", transform: "scale(1) translateY(0)" } },
+              scan: { "0%": { transform: "translateX(-120%)" }, "100%": { transform: "translateX(220%)" } },
+              flow: { "0%": { strokeDashoffset: "120" }, "100%": { strokeDashoffset: "0" } },
+            },
+            animation: {
+              rise: "rise .35s ease-out forwards",
+              softPulse: "softPulse 1s ease-in-out infinite",
+              pingRing: "pingRing 1.05s ease-out infinite",
+              pop: "pop .28s ease-out forwards",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        background: radial-gradient(circle at top, #172554 0%, #020617 55%, #020617 100%);
+      }
+      .card {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(11, 18, 32, 0.72);
+      }
+      .nav-item[aria-current="page"] {
+        background: rgba(59, 130, 246, 0.14);
+        border-color: rgba(59, 130, 246, 0.45);
+        color: #dbeafe;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 8px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.22);
+        border-radius: 10px;
+      }
+      .scanline::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 0%, rgba(52, 211, 153, 0.18) 46%, rgba(52, 211, 153, 0.55) 50%, rgba(52, 211, 153, 0.18) 54%, transparent 100%);
+        animation: scan 1.1s linear infinite;
+        mix-blend-mode: screen;
+        opacity: 0.9;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body class="text-slate-100 min-h-screen">
+    <main class="h-screen max-h-screen">
+      <div class="h-full grid grid-cols-12">
+        <!-- Left nav -->
+        <aside class="col-span-12 md:col-span-2 xl:col-span-2 border-r border-slate-700/40 bg-panel/70 backdrop-blur px-3 py-4">
+          <div class="px-2 py-2 mb-3">
+            <div class="flex items-center gap-2">
+              <div class="h-9 w-9 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center">
+                <i data-lucide="scale" class="w-4 h-4 text-blue-200"></i>
+              </div>
+              <div>
+                <div class="text-sm font-semibold">Legal AI</div>
+                <div class="text-[11px] text-slate-400">Demo Console</div>
+              </div>
+            </div>
+          </div>
+
+          <nav class="space-y-1 px-1">
+            <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent text-sm text-slate-300 hover:bg-slate-800/45" data-view="knowledge" aria-current="page">
+              <i data-lucide="files" class="w-4 h-4"></i><span>Knowledge</span>
+            </button>
+            <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent text-sm text-slate-300 hover:bg-slate-800/45" data-view="rag">
+              <i data-lucide="layers-3" class="w-4 h-4"></i><span>RAG Engine</span>
+            </button>
+            <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent text-sm text-slate-300 hover:bg-slate-800/45" data-view="workflow">
+              <i data-lucide="workflow" class="w-4 h-4"></i><span>LangGraph</span>
+            </button>
+            <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent text-sm text-slate-300 hover:bg-slate-800/45" data-view="citation">
+              <i data-lucide="quote" class="w-4 h-4"></i><span>Citation</span>
+            </button>
+            <button class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent text-sm text-slate-300 hover:bg-slate-800/45" data-view="audit">
+              <i data-lucide="file-clock" class="w-4 h-4"></i><span>Audit Log</span>
+            </button>
+          </nav>
+
+          <div class="mt-4 px-2">
+            <div class="rounded-xl border border-slate-700/40 bg-slate-950/30 p-3">
+              <div class="text-[11px] text-slate-400">System</div>
+              <div class="mt-1 text-xs text-slate-300">Mock Data • No backend</div>
+              <div class="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                Animations follow technical pipeline
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Center canvas -->
+        <section class="col-span-12 md:col-span-7 xl:col-span-7 flex flex-col">
+          <header class="px-6 py-4 border-b border-slate-700/35 bg-panel/30 backdrop-blur">
+            <div class="flex items-center justify-between">
+              <div>
+                <div id="canvasTitle" class="text-base font-semibold">Knowledge Parsing</div>
+                <div id="canvasSubtitle" class="text-xs text-slate-400 mt-1">结构化解析：编/章/节/条/款/项 → 可检索节点</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="canvasRunBtn" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-sm">Run</button>
+                <button id="canvasResetBtn" class="px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 text-sm">Reset</button>
+              </div>
+            </div>
+          </header>
+
+          <div class="flex-1 overflow-auto scrollbar-thin px-6 py-6">
+            <div id="canvas" class="card rounded-2xl p-5 min-h-[520px]"></div>
+          </div>
+
+          <!-- Chat input -->
+          <footer class="px-6 py-4 border-t border-slate-700/35 bg-panel/40 backdrop-blur">
+            <div class="flex items-end gap-3">
+              <div class="flex-1">
+                <div class="text-[11px] text-slate-400 mb-1">Chat Input (Agent Orchestrator)</div>
+                <div class="rounded-xl border border-slate-700/50 bg-slate-950/40 px-3 py-2 flex items-end gap-2">
+                  <i data-lucide="message-square" class="w-4 h-4 text-slate-400 mb-1"></i>
+                  <textarea
+                    id="chatInput"
+                    class="w-full bg-transparent outline-none text-sm text-slate-200 resize-none"
+                    rows="2"
+                    placeholder="输入任何内容回车：例如『这份采购合同里违约金 50% 合规吗？』"
+                  ></textarea>
+                </div>
+                <div class="text-[11px] text-slate-500 mt-1">回车发送（Shift+Enter 换行）。发送后将模拟思考 1.5s 并自动切换到相关模块执行。</div>
+              </div>
+              <button id="sendBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm">Send</button>
+            </div>
+            <div id="typingRow" class="hidden mt-3 text-xs text-slate-400 flex items-center gap-2">
+              <span class="inline-flex items-center justify-center w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span>
+              <span class="inline-flex items-center justify-center w-2 h-2 rounded-full bg-slate-500 animate-pulse" style="animation-delay:.12s"></span>
+              <span class="inline-flex items-center justify-center w-2 h-2 rounded-full bg-slate-500 animate-pulse" style="animation-delay:.24s"></span>
+              <span class="ml-2">AI 正在思考并规划执行路径...</span>
+            </div>
+          </footer>
+        </section>
+
+        <!-- Right execution log -->
+        <aside class="col-span-12 md:col-span-3 xl:col-span-3 border-l border-slate-700/35 bg-panel/65 backdrop-blur flex flex-col">
+          <div class="px-4 py-4 border-b border-slate-700/35 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="terminal" class="w-4 h-4 text-slate-300"></i>
+              <div class="font-semibold text-sm">Execution Log</div>
+            </div>
+            <button id="clearLogBtn" class="text-xs px-2 py-1 rounded-md bg-slate-800/70 hover:bg-slate-700/70 border border-slate-700/50">Clear</button>
+          </div>
+          <div id="execLog" class="flex-1 overflow-auto scrollbar-thin px-3 py-3 space-y-2 text-xs"></div>
+          <div class="px-4 py-3 border-t border-slate-700/35 text-[11px] text-slate-400">
+            Tip：录屏时打开右侧日志，可强化“代理执行/系统推理”氛围。
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <script>
+      // -----------------------------
+      // Execution log (right panel)
+      // -----------------------------
+      const execLogEl = document.getElementById("execLog");
+      function logLine(tag, text) {
+        const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+        const color = tag === "System" ? "text-slate-300" : tag === "Agent" ? "text-blue-200" : tag === "Tool" ? "text-indigo-200" : "text-slate-300";
+        const row = document.createElement("div");
+        row.className = "rounded-lg border border-slate-700/35 bg-slate-950/25 px-2.5 py-2 animate-rise";
+        row.innerHTML = `
+          <div class="flex items-start gap-2">
+            <div class="mono text-[10px] text-slate-500 w-[62px] pt-0.5">${time}</div>
+            <div class="mono text-[10px] ${color} w-[58px]">[${tag}]</div>
+            <div class="text-slate-200 leading-5">${text}</div>
+          </div>
+        `;
+        execLogEl.appendChild(row);
+        execLogEl.scrollTop = execLogEl.scrollHeight;
+      }
+      function clearLog() {
+        execLogEl.innerHTML = "";
+      }
+      document.getElementById("clearLogBtn").addEventListener("click", clearLog);
+
+      // -----------------------------
+      // Views + routing
+      // -----------------------------
+      const views = ["knowledge", "rag", "workflow", "citation", "audit"];
+      let activeView = "knowledge";
+      let timers = [];
+      function clearTimers() {
+        timers.forEach((t) => clearTimeout(t));
+        timers = [];
+      }
+      function setNav(view) {
+        activeView = view;
+        document.querySelectorAll(".nav-item").forEach((btn) => {
+          const isActive = btn.dataset.view === view;
+          btn.setAttribute("aria-current", isActive ? "page" : "false");
+        });
+      }
+
+      const canvasTitle = document.getElementById("canvasTitle");
+      const canvasSubtitle = document.getElementById("canvasSubtitle");
+      const canvas = document.getElementById("canvas");
+
+      function setHeader(title, subtitle) {
+        canvasTitle.textContent = title;
+        canvasSubtitle.textContent = subtitle;
+      }
+
+      function renderKnowledgeIdle() {
+        setHeader("Knowledge Parsing", "结构化解析：编/章/节/条/款/项 → 可检索节点");
+        canvas.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-sm text-slate-300">原始法规片段（Mock）</div>
+              <div class="mt-2 rounded-xl border border-slate-700/40 bg-slate-950/35 p-3 text-sm text-slate-200 leading-6">
+                《中华人民共和国民法典》 第三编 合同<br/>
+                第九章 买卖合同<br/>
+                第五百八十五条 第二款：约定的违约金过分高于造成的损失的，当事人可以请求人民法院或者仲裁机构予以适当减少。
+              </div>
+            </div>
+            <div class="w-64 shrink-0 rounded-xl border border-slate-700/40 bg-slate-950/25 p-3">
+              <div class="text-[11px] text-slate-400 uppercase">Parser Output</div>
+              <div class="mt-2 text-xs text-slate-300 leading-5">
+                点击 <span class="text-blue-300">Run</span>，模拟正则+LLM 混合解析，生成树状节点与引用关系。
+              </div>
+            </div>
+          </div>
+          <div class="mt-5 rounded-2xl border border-slate-700/40 bg-slate-950/25 p-4">
+            <div class="text-sm font-medium">结构化树（预览）</div>
+            <div id="kTree" class="mt-3 text-sm text-slate-300"></div>
+          </div>
+        `;
+        const tree = canvas.querySelector("#kTree");
+        tree.innerHTML = `
+          <div class="text-slate-500">等待解析…</div>
+        `;
+      }
+
+      function runKnowledge() {
+        clearTimers();
+        logLine("System", "开始解析法规文本：ChineseLegalParser + reference extractor (mock).");
+        const tree = canvas.querySelector("#kTree");
+        if (!tree) return;
+        tree.innerHTML = "";
+
+        const nodes = [
+          { indent: 0, tag: "[Law]", text: "中华人民共和国民法典" },
+          { indent: 1, tag: "[Book]", text: "第三编 合同" },
+          { indent: 2, tag: "[Chapter]", text: "第九章 买卖合同" },
+          { indent: 3, tag: "[Article]", text: "第585条（违约金）" },
+          { indent: 4, tag: "[Paragraph]", text: "第2款：违约金过分高于损失可请求减少" },
+          { indent: 4, tag: "[Reference]", text: "引用链：合同编通则解释·第65条" },
+        ];
+
+        nodes.forEach((n, i) => {
+          timers.push(
+            setTimeout(() => {
+              const row = document.createElement("div");
+              row.className = "flex items-start gap-2 animate-rise";
+              row.style.marginLeft = `${n.indent * 16}px`;
+              row.innerHTML = `
+                <span class="mono text-[11px] text-emerald-300">${n.tag}</span>
+                <span class="text-slate-200">${n.text}</span>
+              `;
+              tree.appendChild(row);
+              if (i === 2) logLine("Tool", "抽取层级：编/章/条… 完成。");
+              if (i === 4) logLine("Tool", "抽取款/项与引用：REFERENCES edges + metadata injection 完成。");
+              if (i === nodes.length - 1) logLine("Agent", "结构化节点已入 staging（待审核）并可参与检索。");
+            }, 380 * (i + 1))
+          );
+        });
+      }
+
+      function renderRagIdle() {
+        setHeader("RAG Engine", "三路并行检索 → RRF 融合 → gte-rerank 精排 → Top-K");
+        canvas.innerHTML = `
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex-1">
+              <div class="text-[11px] text-slate-400 uppercase">Query</div>
+              <div class="mt-2 rounded-xl border border-slate-700/40 bg-slate-950/35 px-3 py-2 flex items-center gap-2">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400"></i>
+                <input id="ragQuery" class="w-full bg-transparent outline-none text-sm text-slate-200" value="违约金50%是否过高？单方免责条款是否有效？" />
+              </div>
+            </div>
+            <button id="ragSearchBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm">Search</button>
+          </div>
+
+          <div class="mt-5 rounded-2xl border border-slate-700/40 bg-slate-950/25 p-5 min-h-[420px] overflow-hidden">
+            <div class="flex items-center justify-center h-[420px] text-slate-500 text-sm" id="ragStage">等待检索…</div>
+          </div>
+        `;
+        lucide.createIcons();
+        canvas.querySelector("#ragSearchBtn").addEventListener("click", runRag);
+      }
+
+      function runRag() {
+        clearTimers();
+        const q = canvas.querySelector("#ragQuery")?.value?.trim() || "";
+        logLine("System", `接收检索请求："${q || "（空）"}"`);
+        logLine("Agent", "Query 理解：NER + 改写 + 过滤条件生成（mock）…");
+
+        const stage = canvas.querySelector("#ragStage");
+        if (!stage) return;
+
+        // Layout: 3 nodes around a center point
+        stage.className = "relative h-[420px]";
+        stage.innerHTML = `
+          <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div id="ragCenter" class="h-12 w-12 rounded-full border border-blue-300/60 bg-blue-500/20 flex items-center justify-center">
+              <i data-lucide="sparkles" class="w-4 h-4 text-blue-200"></i>
+            </div>
+          </div>
+
+          <div class="absolute left-[16%] top-[22%]">
+            <div class="relative">
+              <div class="h-16 w-16 rounded-full border border-slate-500/60 bg-slate-800/30 flex items-center justify-center text-sm">ES</div>
+              <div class="absolute inset-0 rounded-full border border-blue-300/70 opacity-0" id="ringES"></div>
+            </div>
+          </div>
+          <div class="absolute left-[70%] top-[20%]">
+            <div class="relative">
+              <div class="h-16 w-16 rounded-full border border-slate-500/60 bg-slate-800/30 flex items-center justify-center text-sm">Milvus</div>
+              <div class="absolute inset-0 rounded-full border border-blue-300/70 opacity-0" id="ringMilvus"></div>
+            </div>
+          </div>
+          <div class="absolute left-[44%] top-[72%]">
+            <div class="relative">
+              <div class="h-16 w-16 rounded-full border border-slate-500/60 bg-slate-800/30 flex items-center justify-center text-sm">Neo4j</div>
+              <div class="absolute inset-0 rounded-full border border-blue-300/70 opacity-0" id="ringNeo"></div>
+            </div>
+          </div>
+
+          <div id="ragResults" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 mt-20 w-[84%] opacity-0"></div>
+        `;
+        lucide.createIcons();
+
+        const ringES = stage.querySelector("#ringES");
+        const ringMilvus = stage.querySelector("#ringMilvus");
+        const ringNeo = stage.querySelector("#ringNeo");
+        const center = stage.querySelector("#ragCenter");
+        const results = stage.querySelector("#ragResults");
+
+        function fireRings() {
+          [ringES, ringMilvus, ringNeo].forEach((el, idx) => {
+            if (!el) return;
+            el.style.opacity = "1";
+            el.className = "absolute inset-0 rounded-full border border-blue-300/70 animate-[pingRing_1.05s_ease-out_infinite]";
+            el.style.animationDelay = `${idx * 120}ms`;
+          });
+        }
+
+        function converge() {
+          logLine("System", "正在检索 Elasticsearch (BM25)…");
+          timers.push(setTimeout(() => logLine("System", "正在检索 Milvus (Dense + Sparse)…"), 220));
+          timers.push(setTimeout(() => logLine("System", "正在检索 Neo4j (引用链展开)…"), 440));
+          timers.push(setTimeout(() => logLine("Tool", "RRF 融合：Top-30 候选生成。"), 980));
+          timers.push(setTimeout(() => logLine("Tool", "gte-rerank 精排：Top-5 输出。"), 1380));
+
+          if (center) {
+            center.classList.add("animate-softPulse");
+            center.classList.add("border-blue-200/80");
+          }
+
+          // draw converging beams (simple CSS lines)
+          const beams = document.createElement("div");
+          beams.className = "absolute inset-0";
+          beams.innerHTML = `
+            <div class="absolute left-[20%] top-[26%] w-[32%] h-px bg-blue-400/40 origin-left rotate-[18deg] transition-opacity duration-500 opacity-0" id="beam1"></div>
+            <div class="absolute left-[55%] top-[26%] w-[25%] h-px bg-blue-400/40 origin-left rotate-[165deg] transition-opacity duration-500 opacity-0" id="beam2"></div>
+            <div class="absolute left-[50%] top-[62%] w-[22%] h-px bg-blue-400/40 origin-left rotate-[-92deg] transition-opacity duration-500 opacity-0" id="beam3"></div>
+          `;
+          stage.appendChild(beams);
+          const b1 = beams.querySelector("#beam1");
+          const b2 = beams.querySelector("#beam2");
+          const b3 = beams.querySelector("#beam3");
+          timers.push(setTimeout(() => { if (b1) b1.style.opacity = "1"; if (b2) b2.style.opacity = "1"; if (b3) b3.style.opacity = "1"; }, 520));
+        }
+
+        function popResults() {
+          if (!results) return;
+          results.innerHTML = `
+            <div class="rounded-2xl border border-slate-700/45 bg-slate-950/45 p-4 animate-pop">
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-semibold">Top-5 Results</div>
+                <div class="text-[11px] text-slate-400 mono">verified candidates: 5/5</div>
+              </div>
+              <div class="mt-3 space-y-2 text-sm">
+                <div class="rounded-lg border border-slate-700/40 bg-slate-900/35 px-3 py-2">《民法典》第585条第2款：违约金过分高于损失可请求调整</div>
+                <div class="rounded-lg border border-slate-700/40 bg-slate-900/35 px-3 py-2">《民法典》第497条：格式条款免责/加重责任/限制权利无效</div>
+                <div class="rounded-lg border border-slate-700/40 bg-slate-900/35 px-3 py-2">《合同编通则解释》第65条：违约金调整裁量因素</div>
+                <div class="rounded-lg border border-slate-700/40 bg-slate-900/35 px-3 py-2">Neo4j 引用链：第585条 ↔ 第497条 关联节点展开</div>
+                <div class="rounded-lg border border-slate-700/40 bg-slate-900/35 px-3 py-2">来源标注：现行有效 / 法律层级权重已加成</div>
+              </div>
+            </div>
+          `;
+          results.style.opacity = "1";
+          logLine("Agent", "检索完成：已生成可引用上下文（Top-K）并送入后续评估。");
+        }
+
+        fireRings();
+        timers.push(setTimeout(converge, 850));
+        timers.push(setTimeout(() => {
+          // stop rings
+          [ringES, ringMilvus, ringNeo].forEach((el) => {
+            if (!el) return;
+            el.style.opacity = "0";
+            el.className = "absolute inset-0 rounded-full border border-blue-300/70 opacity-0";
+          });
+          popResults();
+        }, 2100));
+      }
+
+      function renderWorkflowIdle() {
+        setHeader("LangGraph Workflow", "plan → extract → search → assess → interrupt(human) → report");
+        canvas.innerHTML = `
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-sm text-slate-300">
+              审查对象（Mock）：<span class="text-slate-200">采购合同（违约金 50% + 单方免责）</span>
+            </div>
+            <div class="flex gap-2">
+              <button id="wfRunBtn" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm">Run Workflow</button>
+              <button id="wfInterruptBtn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-sm">Interrupt</button>
+            </div>
+          </div>
+          <div class="mt-5 rounded-2xl border border-slate-700/40 bg-slate-950/25 p-5">
+            <svg id="wfSvg" viewBox="0 0 740 160" class="w-full"></svg>
+            <div id="wfStatus" class="mt-4"></div>
+          </div>
+        `;
+        lucide.createIcons();
+        canvas.querySelector("#wfRunBtn").addEventListener("click", runWorkflow);
+        canvas.querySelector("#wfInterruptBtn").addEventListener("click", () => {
+          clearTimers();
+          logLine("System", "手动 Interrupt：进入 Awaiting Human Approval。");
+          showHumanGate();
+        });
+        renderWorkflowGraph(0, null);
+      }
+
+      const wfNodes = ["Plan", "Extract", "Search", "Assess", "HumanGate", "Report"];
+      let wfStep = 0;
+      function renderWorkflowGraph(step, flowingEdgeIndex) {
+        const svg = canvas.querySelector("#wfSvg");
+        if (!svg) return;
+        wfStep = step;
+        let out = `<defs>
+          <linearGradient id="flowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="rgba(59,130,246,0)" />
+            <stop offset="40%" stop-color="rgba(59,130,246,0.35)" />
+            <stop offset="60%" stop-color="rgba(59,130,246,0.85)" />
+            <stop offset="100%" stop-color="rgba(59,130,246,0)" />
+          </linearGradient>
+        </defs>`;
+
+        for (let i = 0; i < wfNodes.length; i += 1) {
+          const x = 26 + i * 118;
+          const y = 62;
+          const done = step > i;
+          const active = step === i;
+          const fill = done ? "#16a34a" : active ? "#2563eb" : "#475569";
+          const opacity = done ? 0.88 : active ? 0.92 : 0.38;
+
+          if (i < wfNodes.length - 1) {
+            const x2 = x + 96;
+            const strokeBase = done ? "rgba(34,197,94,0.55)" : "rgba(51,65,85,0.9)";
+            out += `<line x1="${x + 90}" y1="${y + 18}" x2="${x2 + 10}" y2="${y + 18}" stroke="${strokeBase}" stroke-width="2" />`;
+
+            if (flowingEdgeIndex === i) {
+              out += `<line x1="${x + 90}" y1="${y + 18}" x2="${x2 + 10}" y2="${y + 18}"
+                stroke="url(#flowGrad)" stroke-width="4" stroke-linecap="round"
+                stroke-dasharray="16 120" class="animate-[flow_.55s_linear_forwards]" />`;
+            }
+          }
+
+          out += `<rect x="${x}" y="${y}" width="90" height="44" rx="10" fill="${fill}" opacity="${opacity}" style="transition:opacity .35s ease, fill .35s ease;" />`;
+          out += `<text x="${x + 45}" y="${y + 27}" text-anchor="middle" fill="#e2e8f0" font-size="11">${wfNodes[i]}</text>`;
+        }
+        svg.innerHTML = out;
+      }
+
+      function showHumanGate() {
+        const status = canvas.querySelector("#wfStatus");
+        if (!status) return;
+        renderWorkflowGraph(4, null);
+        status.innerHTML = `
+          <div class="rounded-xl border border-red-500/55 bg-red-950/35 px-3 py-3 text-sm text-red-200">
+            <div class="font-semibold">Awaiting Human Approval</div>
+            <div class="text-red-300/90 mt-1">检测到 2 项高风险：违约金过高 / 单方免责。需要法务确认后继续生成报告。</div>
+            <div class="mt-3 flex gap-2">
+              <button id="wfApproveBtn" class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white">Approve</button>
+              <button id="wfRejectBtn" class="px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-slate-200">Defer</button>
+            </div>
+          </div>
+        `;
+        status.querySelector("#wfApproveBtn").addEventListener("click", () => {
+          logLine("Agent", "收到人工审批：APPROVE。继续执行 report 节点…");
+          status.innerHTML = "";
+          renderWorkflowGraph(4, 4);
+          timers.push(
+            setTimeout(() => {
+              renderWorkflowGraph(5, null);
+              renderWorkflowGraph(6, null);
+              showWorkflowCompleted();
+            }, 620)
+          );
+        });
+        status.querySelector("#wfRejectBtn").addEventListener("click", () => {
+          logLine("System", "人工选择 DEFER：流程暂停，已写入审计（mock）。");
+          status.innerHTML = `<div class="rounded-xl border border-slate-700/45 bg-slate-950/30 px-3 py-3 text-sm text-slate-300">Deferred. 可在 Audit Log 查看记录。</div>`;
+        });
+      }
+
+      function showWorkflowCompleted() {
+        const status = canvas.querySelector("#wfStatus");
+        if (!status) return;
+        status.innerHTML = `
+          <div class="rounded-xl border border-emerald-500/55 bg-emerald-950/30 px-3 py-3 text-sm text-emerald-200">
+            <div class="font-semibold">Report Generated</div>
+            <div class="text-emerald-300/90 mt-1">报告已生成：总体评级“中风险-修改后可签署”，引用已验证（2/2）。</div>
+          </div>
+        `;
+      }
+
+      function runWorkflow() {
+        clearTimers();
+        logLine("System", "启动 LangGraph：plan → extract → search → assess …");
+        renderWorkflowGraph(0, null);
+
+        function stepTo(next, edgeIdx, delay, line) {
+          timers.push(
+            setTimeout(() => {
+              if (line) logLine("Tool", line);
+              renderWorkflowGraph(next, edgeIdx);
+              timers.push(setTimeout(() => renderWorkflowGraph(next, null), 560));
+            }, delay)
+          );
+        }
+
+        stepTo(1, 0, 420, "Plan: 任务分解与路由（qwen3-max mock）。");
+        stepTo(2, 1, 1100, "Extract: 条款提取（qwen-plus mock）→ 12 条候选。");
+        stepTo(3, 2, 1780, "Search: 三路检索 + rerank → Top-K 上下文。");
+        stepTo(4, 3, 2450, "Assess: 风险评估 → 高风险=2，触发 interrupt()。");
+
+        timers.push(
+          setTimeout(() => {
+            logLine("Agent", "interrupt(): Awaiting Human Approval");
+            showHumanGate();
+          }, 3150)
+        );
+      }
+
+      function renderCitationIdle() {
+        setHeader("Citation Verification", "hover → 扫描验真 → verified badge");
+        canvas.innerHTML = `
+          <div class="rounded-2xl border border-slate-700/40 bg-slate-950/25 p-5">
+            <div class="text-sm text-slate-300 leading-7">
+              从实务角度，合同约定的违约金过分高于损失时可请求调整，
+              <span class="citationRef relative text-blue-300 underline cursor-pointer" data-law="民法典" data-article="第585条第2款">
+                [《民法典》第585条第2款]
+              </span>
+              。若条款属于格式条款且不合理免责，可能无效，
+              <span class="citationRef relative text-blue-300 underline cursor-pointer" data-law="民法典" data-article="第497条">
+                [《民法典》第497条]
+              </span>
+              。
+            </div>
+            <div class="mt-4 grid md:grid-cols-2 gap-3 text-sm">
+              <div class="rounded-xl border border-slate-700/45 bg-slate-900/30 p-3">
+                <div class="text-[11px] text-slate-400 uppercase">Verifier</div>
+                <div class="mt-2 text-slate-300">模拟校验：从检索结果 index 中匹配 law_name + article，返回 verified + status。</div>
+              </div>
+              <div class="rounded-xl border border-slate-700/45 bg-slate-900/30 p-3">
+                <div class="text-[11px] text-slate-400 uppercase">Why it matters</div>
+                <div class="mt-2 text-slate-300">法律场景容错率低：引用必须可验证，且提示时效/废止风险。</div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        function attach(ref) {
+          ref.addEventListener("mouseenter", () => {
+            logLine("System", `CitationVerifier: 正在验真 ${ref.dataset.law}·${ref.dataset.article} …`);
+            const bubble = document.createElement("div");
+            bubble.className =
+              "absolute left-1/2 -translate-x-1/2 -top-10 w-max max-w-[320px] rounded-lg border border-emerald-500/60 bg-emerald-950/55 px-2.5 py-1.5 text-xs text-emerald-200 shadow-lg overflow-hidden scanline";
+            bubble.innerHTML = `
+              <div class="flex items-center gap-1">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                <span>Source Verified</span>
+                <span class="text-emerald-300/70 mono ml-1">(${ref.dataset.law}·${ref.dataset.article})</span>
+              </div>
+            `;
+            ref.appendChild(bubble);
+            lucide.createIcons();
+
+            timers.push(
+              setTimeout(() => logLine("Tool", `验证通过：verified=true, status=现行有效`), 420)
+            );
+          });
+          ref.addEventListener("mouseleave", () => {
+            const bubble = ref.querySelector(".scanline");
+            if (bubble) bubble.remove();
+          });
+        }
+        canvas.querySelectorAll(".citationRef").forEach(attach);
+        lucide.createIcons();
+      }
+
+      function renderAuditIdle() {
+        setHeader("Audit Log", "append-only / traceable decisions / replayable timeline");
+        canvas.innerHTML = `
+          <div class="rounded-2xl border border-slate-700/40 bg-slate-950/25 p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-semibold">Audit Trail (Mock)</div>
+                <div class="text-xs text-slate-400 mt-1">每次检索、每次审批、每条引用都有可审计记录。</div>
+              </div>
+              <button id="auditReplayBtn" class="px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700/50 text-sm">Replay</button>
+            </div>
+            <div id="auditList" class="mt-4 space-y-2 text-sm"></div>
+          </div>
+        `;
+        canvas.querySelector("#auditReplayBtn").addEventListener("click", replayAudit);
+        replayAudit();
+      }
+
+      function replayAudit() {
+        clearTimers();
+        const list = canvas.querySelector("#auditList");
+        if (!list) return;
+        list.innerHTML = "";
+        const lines = [
+          "[change_detected] 来源：national_law_db，发现法规修订（content_hash diff）",
+          "[staging_created] 暂存区记录创建：pending_review",
+          "[notification_sent] 通知：飞书/钉钉卡片（mock）",
+          "[rag_search] ES+Milvus+Neo4j 并行检索 → RRF → gte-rerank",
+          "[human_review_interrupt] 高风险条款触发审批门",
+          "[review_approved] 法务批准入库/继续审查",
+          "[citations_verified] 引用校验：verified=true（现行有效）",
+          "[report_generated] 报告生成：高风险 2 项，中风险 1 项",
+        ];
+        lines.forEach((t, i) => {
+          timers.push(
+            setTimeout(() => {
+              const row = document.createElement("div");
+              row.className = "rounded-xl border border-slate-700/40 bg-slate-900/20 px-3 py-2 animate-rise";
+              row.innerHTML = `<span class="mono text-[11px] text-slate-400">${String(i + 1).padStart(2, "0")}</span><span class="ml-2 text-slate-200">${t}</span>`;
+              list.appendChild(row);
+            }, 180 * (i + 1))
+          );
+        });
+      }
+
+      function renderView(view) {
+        clearTimers();
+        setNav(view);
+        if (view === "knowledge") renderKnowledgeIdle();
+        else if (view === "rag") renderRagIdle();
+        else if (view === "workflow") renderWorkflowIdle();
+        else if (view === "citation") renderCitationIdle();
+        else renderAuditIdle();
+        lucide.createIcons();
+      }
+
+      document.querySelectorAll(".nav-item").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          renderView(btn.dataset.view);
+          logLine("System", `切换视图：${btn.dataset.view}`);
+        });
+      });
+
+      // -----------------------------
+      // Canvas controls
+      // -----------------------------
+      document.getElementById("canvasRunBtn").addEventListener("click", () => {
+        if (activeView === "knowledge") runKnowledge();
+        else if (activeView === "rag") runRag();
+        else if (activeView === "workflow") runWorkflow();
+        else if (activeView === "citation") logLine("System", "提示：悬停法条触发验真扫描动效。");
+        else replayAudit();
+      });
+      document.getElementById("canvasResetBtn").addEventListener("click", () => renderView(activeView));
+
+      // -----------------------------
+      // Chat orchestrator
+      // -----------------------------
+      const chatInput = document.getElementById("chatInput");
+      const typingRow = document.getElementById("typingRow");
+      function setTyping(on) {
+        typingRow.classList.toggle("hidden", !on);
+      }
+
+      function routeIntent(text) {
+        const t = text.toLowerCase();
+        if (t.includes("解析") || t.includes("入库") || t.includes("知识库") || t.includes("法规") && t.includes("结构")) return "knowledge";
+        if (t.includes("检索") || t.includes("rag") || t.includes("milvus") || t.includes("es") || t.includes("neo4j") || t.includes("查询")) return "rag";
+        if (t.includes("审核") || t.includes("合同") || t.includes("违约金") || t.includes("风险") || t.includes("approve") || t.includes("langgraph")) return "workflow";
+        if (t.includes("引用") || t.includes("citation") || t.includes("验真") || t.includes("法条") || t.includes("来源")) return "citation";
+        if (t.includes("审计") || t.includes("日志") || t.includes("追踪") || t.includes("langfuse")) return "audit";
+        return "workflow";
+      }
+
+      function sendChat() {
+        const text = (chatInput.value || "").trim();
+        if (!text) return;
+        logLine("User", text);
+        setTyping(true);
+        logLine("Agent", "Orchestrator: Plan-and-Execute 任务分解中…");
+        clearTimers();
+
+        const view = routeIntent(text);
+        timers.push(
+          setTimeout(() => {
+            setTyping(false);
+            renderView(view);
+            logLine("Agent", `已路由到模块：${view}（mock intent routing）`);
+
+            // Auto-run animation after routing
+            timers.push(
+              setTimeout(() => {
+                if (view === "knowledge") runKnowledge();
+                else if (view === "rag") runRag();
+                else if (view === "workflow") runWorkflow();
+                else if (view === "audit") replayAudit();
+                else logLine("System", "请悬停法条触发 Citation 扫描验真动效。");
+              }, 240)
+            );
+          }, 1500)
+        );
+
+        chatInput.value = "";
+      }
+
+      document.getElementById("sendBtn").addEventListener("click", sendChat);
+      chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          sendChat();
+        }
+      });
+
+      // Boot
+      clearLog();
+      logLine("System", "Demo ready. 点击左侧模块或在下方输入问题触发 Agent 自动执行。");
+      renderView("knowledge");
+      lucide.createIcons();
+    </script>
+  </body>
+</html>
