@@ -51,6 +51,15 @@ export default function ReviewPage() {
     if (threadId) localStorage.setItem("legal_ai_review_thread_id", threadId);
   }, [threadId]);
 
+  // Demo 模式下若存在历史 demo thread（例如刷新页面后），重置为初始态避免卡在“处理中”
+  useEffect(() => {
+    if (!isDemo) return;
+    if (demoStatus !== "idle") return;
+    if (threadId.startsWith("demo_review_")) {
+      setThreadId("");
+    }
+  }, [isDemo, demoStatus, threadId]);
+
   const statusQuery = useQuery({
     queryKey: ["reviewStatus", threadId],
     enabled: Boolean(threadId),
