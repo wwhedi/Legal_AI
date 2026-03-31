@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -23,6 +23,16 @@ class ReviewApproveRequest(BaseModel):
     approved: bool
     comment: str | None = None
     action: Literal["approve", "revise"] | None = None
+
+
+class ReviewStatusResponse(BaseModel):
+    thread_id: str
+    status: Literal["not_found", "waiting_human_review", "in_progress", "completed"]
+    waiting_human_review: bool = False
+    interrupt_payload: Optional[Dict[str, Any]] = None
+    risk_assessment: Dict[str, Any] = Field(default_factory=dict)
+    report: Optional[Dict[str, Any]] = None
+    critique_notes: list[str] = Field(default_factory=list)
 
 
 async def _run_stream(initial_input: Dict[str, Any] | None, thread_id: str) -> list[Dict[str, Any]]:
@@ -59,6 +69,53 @@ async def submit_review(req: ReviewSubmitRequest) -> Dict[str, Any]:
         "risk_assessment": state_values.get("risk_assessment", {}),
         "interrupt_payload": state_values.get("human_decision"),
     }
+
+
+@router.get("/status/{thread_id}", response_model=ReviewStatusResponse)
+async def get_review_status(thread_id: str) -> ReviewStatusResponse:
+    """
+    前端轮询状态接口：
+    - waiting_human_review: 已触发 human_review_gate interrupt，等待人工审批
+    - completed: 已生成 report
+    - in_progress: 流程存在但未完成且未到人工闸门
+    """
+
+    config = {"configurable": {"thread_id": thread_id}}
+    state_snapshot = await asyncio.to_thread(contract_review_graph.get_state, config)
+    state_values = getattr(state_snapshot, "values", None)
+    if not state_values:
+        return ReviewStatusResponse(thread_id=thread_id, status="not_found")
+
+    values: Dict[str, Any] = state_values or {}
+    report = values.get("report")
+    human_decision = values.get("human_decision")
+    has_high_risk = bool(values.get("has_high_risk", False))
+
+    waiting_human = False
+    interrupt_payload: Optional[Dict[str, Any]] = None
+    if isinstance(human_decision, dict) and human_decision.get("type") == "human_review_required":
+        waiting_human = True
+        interrupt_payload = human_decision
+    elif has_high_risk and not report and not human_decision:
+        # 兼容：若中断载荷未被序列化回填，也视为等待人工审核
+        waiting_human = True
+
+    if report:
+        status: Literal["waiting_human_review", "in_progress", "completed"] = "completed"
+    elif waiting_human:
+        status = "waiting_human_review"
+    else:
+        status = "in_progress"
+
+    return ReviewStatusResponse(
+        thread_id=thread_id,
+        status=status,
+        waiting_human_review=waiting_human,
+        interrupt_payload=interrupt_payload,
+        risk_assessment=values.get("risk_assessment", {}) or {},
+        report=report,
+        critique_notes=values.get("critique_notes", []) or [],
+    )
 
 
 @router.post("/approve/{thread_id}")

@@ -6,7 +6,10 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 from config.dashscope_config import ModelRegistry, get_dashscope_async_client
-from models.regulation_change import ChangeReviewStatus, RegulationChangeRecord
+from config.db_postgres import RegulationChangeRecord as RegulationChangeRecordORM
+from config.db_postgres import get_async_sessionmaker
+from models.regulation_change import ChangeReviewStatus, RegulationChangeRecord as RegulationChangeRecordSchema
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class RegulationChangeDetector:
@@ -22,7 +25,8 @@ class RegulationChangeDetector:
         self,
         new_regulation: Dict[str, Any],
         old_regulation: Optional[Dict[str, Any]] = None,
-    ) -> RegulationChangeRecord:
+        session: AsyncSession | None = None,
+    ) -> RegulationChangeRecordSchema:
         regulation_id = str(
             new_regulation.get("regulation_id")
             or new_regulation.get("id")
@@ -51,7 +55,7 @@ class RegulationChangeDetector:
             )
 
         now = datetime.utcnow()
-        return RegulationChangeRecord(
+        record = RegulationChangeRecordSchema(
             regulation_id=regulation_id,
             regulation_title=regulation_title,
             changed=changed,
@@ -66,6 +70,12 @@ class RegulationChangeDetector:
             created_at=now,
             updated_at=now,
         )
+
+        # 持久化：仅在确实发生变更时写入“待审核记录”
+        if record.changed:
+            await self._persist_change_record(record, session=session)
+
+        return record
 
     def _canonical_json(self, payload: Dict[str, Any]) -> str:
         # sort_keys + compact separator 保证同内容得到稳定 hash
@@ -103,6 +113,40 @@ class RegulationChangeDetector:
             temperature=0.1,
         )
         return (completion.choices[0].message.content or "").strip()
+
+    async def _persist_change_record(
+        self,
+        record: RegulationChangeRecordSchema,
+        session: AsyncSession | None,
+    ) -> None:
+        owns_session = session is None
+        if session is None:
+            session_maker = get_async_sessionmaker()
+            session = session_maker()
+
+        try:
+            orm_row = RegulationChangeRecordORM(
+                id=record.id,
+                regulation_id=record.regulation_id,
+                regulation_title=record.regulation_title,
+                changed=record.changed,
+                old_md5=record.old_md5,
+                new_md5=record.new_md5,
+                old_sha256=record.old_sha256,
+                new_sha256=record.new_sha256,
+                summary=record.summary,
+                status=record.status.value if hasattr(record.status, "value") else str(record.status),
+                new_payload=record.new_payload,
+                old_payload=record.old_payload,
+            )
+            session.add(orm_row)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
 
 
 __all__ = ["RegulationChangeDetector"]
