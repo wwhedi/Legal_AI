@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
-from config.dashscope_config import ModelRegistry, get_dashscope_async_client
+from config.dashscope_config import ModelRegistry, create_chat_completion
 from config.db_postgres import RegulationChangeRecord as RegulationChangeRecordORM
 from config.db_postgres import get_async_sessionmaker
 from models.regulation_change import ChangeReviewStatus, RegulationChangeRecord as RegulationChangeRecordSchema
@@ -92,7 +92,6 @@ class RegulationChangeDetector:
         new_regulation: Dict[str, Any],
         old_regulation: Optional[Dict[str, Any]],
     ) -> str:
-        client = get_dashscope_async_client()
         system_prompt = (
             "你是法律知识库变更审计助手。"
             "请基于新旧法规 JSON 的对比结果，输出简洁、可审计的中文摘要。"
@@ -103,16 +102,12 @@ class RegulationChangeDetector:
             f"旧法规JSON:\n{json.dumps(old_regulation, ensure_ascii=False, indent=2) if old_regulation else '无（首次入库）'}\n\n"
             f"新法规JSON:\n{json.dumps(new_regulation, ensure_ascii=False, indent=2)}"
         )
-
-        completion = await client.chat.completions.create(
-            model=ModelRegistry.TEXT_ROUTER,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+        return await create_chat_completion(
+            model=ModelRegistry.text_router(),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             temperature=0.1,
         )
-        return (completion.choices[0].message.content or "").strip()
 
     async def _persist_change_record(
         self,

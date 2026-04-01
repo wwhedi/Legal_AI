@@ -14,6 +14,8 @@ export const DEMO_QA_CITATIONS: Citation[] = [
     article: "496",
     status: "effective",
     score: 0.93,
+    verified: true,
+    verify_source: "retrieved_context",
   },
   {
     ref_id: "[2]",
@@ -21,6 +23,8 @@ export const DEMO_QA_CITATIONS: Citation[] = [
     article: "563",
     status: "effective",
     score: 0.88,
+    verified: true,
+    verify_source: "retrieved_context",
   },
 ];
 

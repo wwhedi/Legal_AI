@@ -15,6 +15,8 @@ export interface Citation {
   article?: string | null;
   status?: string | null;
   score?: number | null;
+  verified?: boolean;
+  verify_source?: "retrieved_context" | "kb_fallback" | "unverified" | string;
 }
 
 export interface RegulationCandidateDoc {
@@ -120,6 +122,22 @@ export interface LegalQAState {
   retrieved_docs?: RegulationCandidateDoc[];
   answer?: string;
   citations?: Citation[];
+  answer_needs_human_review?: boolean;
+}
+
+export interface AskQARequest {
+  question: string;
+  user_context?: Record<string, unknown>;
+}
+
+export interface AskQAResponse {
+  question: string;
+  intent?: LegalIntent;
+  intent_reason?: string;
+  answer: string;
+  citations: Citation[];
+  verification_details: Array<Record<string, unknown>>;
+  answer_needs_human_review: boolean;
 }
 
 // --- API DTOs ---

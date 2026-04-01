@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Sequence
 
-from config.dashscope_config import ModelRegistry, get_dashscope_async_client
+from config.dashscope_config import ModelRegistry, get_llm_async_client
 
 
 class EmbeddingService:
@@ -27,9 +27,9 @@ class EmbeddingService:
             else:
                 payload_input.append(text)
 
-        client = get_dashscope_async_client()
+        client = get_llm_async_client()
         response = await client.embeddings.create(
-            model=ModelRegistry.EMBEDDING,
+            model=ModelRegistry.embedding(),
             input=payload_input,
         )
         # OpenAI 兼容格式：response.data[i].embedding

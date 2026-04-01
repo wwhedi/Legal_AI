@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Bot } from "lucide-react";
 
 import type { Citation } from "@/types";
+import { askLegalQuestion } from "@/services/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   citations?: Citation[];
+  answerNeedsHumanReview?: boolean;
 };
 
 type CitationDetail = {
@@ -32,12 +34,14 @@ type CitationDetail = {
   article: string;
   status: "Verified" | "Unverified";
   excerpt: string;
+  verify_source?: string;
 };
 
 function mockAssistantAnswer(question: string): {
   content: string;
   citations: Citation[];
   details: CitationDetail[];
+  answerNeedsHumanReview: boolean;
 } {
   return {
     content:
@@ -51,6 +55,8 @@ function mockAssistantAnswer(question: string): {
         article: "496",
         status: "effective",
         score: 0.88,
+        verified: true,
+        verify_source: "retrieved_context",
       },
       {
         ref_id: "[2]",
@@ -58,6 +64,8 @@ function mockAssistantAnswer(question: string): {
         article: "563",
         status: "effective",
         score: 0.83,
+        verified: true,
+        verify_source: "retrieved_context",
       },
     ],
     details: [
@@ -78,6 +86,7 @@ function mockAssistantAnswer(question: string): {
           "当事人一方迟延履行主要债务，经催告后在合理期限内仍未履行等法定情形下，对方可以解除合同。解除应满足法定或约定条件。",
       },
     ],
+    answerNeedsHumanReview: false,
   };
 }
 
@@ -85,6 +94,7 @@ function demoAssistantAnswer(): {
   content: string;
   citations: Citation[];
   details: CitationDetail[];
+  answerNeedsHumanReview: boolean;
 } {
   return {
     content: DEMO_QA_ANSWER,
@@ -93,6 +103,7 @@ function demoAssistantAnswer(): {
       ref_id,
       ...detail,
     })),
+    answerNeedsHumanReview: DEMO_QA_CITATIONS.some((item) => item.verified === false),
   };
 }
 
@@ -119,11 +130,51 @@ export default function ChatPage() {
     setLoading(true);
     await new Promise((r) => setTimeout(r, 450));
 
-    const mocked = isDemo ? demoAssistantAnswer() : mockAssistantAnswer(q);
+    const mocked = isDemo
+      ? demoAssistantAnswer()
+      : await (async () => {
+          const resp = await askLegalQuestion({ question: q });
+          const verificationMap = new Map<string, Record<string, unknown>>();
+          (resp.verification_details || []).forEach((item) => {
+            const raw = String(item?.raw ?? "");
+            if (raw) verificationMap.set(raw, item);
+          });
+          const details = (resp.citations || []).map((c) => ({
+            ref_id: c.ref_id,
+            law_name: c.law_name ? `《${c.law_name}》` : "法规依据",
+            article: c.article ? `第${c.article}条` : "条款待核验",
+            status: c.verified === false ? ("Unverified" as const) : ("Verified" as const),
+            verify_source: c.verify_source,
+            excerpt:
+              c.verified === false
+                ? `该引用未通过自动校验（source=${String(c.verify_source || "unverified")}），请人工复核后使用。`
+                : `该引用已通过自动校验（source=${String(c.verify_source || "retrieved_context")}）。`,
+          }));
+          details.forEach((d) => {
+            const v = verificationMap.get(d.ref_id);
+            if (!v) return;
+            const evidence = v.fallback_evidence as Record<string, unknown> | undefined;
+            if (evidence?.text && typeof evidence.text === "string") {
+              d.excerpt = evidence.text.slice(0, 220);
+            }
+          });
+          return {
+            content: resp.answer,
+            citations: resp.citations || [],
+            details,
+            answerNeedsHumanReview: resp.answer_needs_human_review,
+          };
+        })().catch(() => mockAssistantAnswer(q));
     const assistantId = `a_${Date.now()}`;
     setMessages((prev) => [
       ...prev,
-      { id: assistantId, role: "assistant", content: "", citations: mocked.citations },
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        citations: mocked.citations,
+        answerNeedsHumanReview: mocked.answerNeedsHumanReview,
+      },
     ]);
 
     // 模拟流式输出：逐字更新助手消息
@@ -162,6 +213,7 @@ export default function ChatPage() {
       role: "assistant",
       content: seeded.content,
       citations: seeded.citations,
+      answerNeedsHumanReview: seeded.answerNeedsHumanReview,
     };
     setMessages([userMsg, assistantMsg]);
     setCitationDetails(DEMO_QA_CITATION_DETAILS);
@@ -238,6 +290,14 @@ export default function ChatPage() {
                         ))}
                       </div>
                     ) : null}
+                    {m.role === "assistant" && m.answerNeedsHumanReview ? (
+                      <Alert className="mt-2 border-amber-300 bg-amber-50">
+                        <AlertTitle>需要人工复核</AlertTitle>
+                        <AlertDescription>
+                          引用中存在未通过校验项，请法务复核后再作为最终结论使用。
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
                   </div>
                 ))}
                 {loading ? (
@@ -289,6 +349,11 @@ export default function ChatPage() {
                   <div className="text-sm font-medium">
                     {citationDetails[selectedRef].law_name} {citationDetails[selectedRef].article}
                   </div>
+                  {citationDetails[selectedRef].verify_source ? (
+                    <div className="text-xs text-slate-500">
+                      校验来源：{citationDetails[selectedRef].verify_source}
+                    </div>
+                  ) : null}
                   <div className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
                     {citationDetails[selectedRef].excerpt}
                   </div>

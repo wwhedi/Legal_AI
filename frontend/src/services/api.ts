@@ -1,4 +1,6 @@
 import type {
+  AskQARequest,
+  AskQAResponse,
   ApproveReviewRequest,
   ApproveReviewResponse,
   PendingRegulationResponse,
@@ -92,5 +94,16 @@ export async function fetchPendingRegulations(
       signal: options?.signal,
     },
   );
+}
+
+export async function askLegalQuestion(
+  payload: AskQARequest,
+  options?: { signal?: AbortSignal },
+): Promise<AskQAResponse> {
+  return request<AskQAResponse>("/qa/ask", {
+    method: "POST",
+    json: payload,
+    signal: options?.signal,
+  });
 }
 

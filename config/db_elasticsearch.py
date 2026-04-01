@@ -38,7 +38,45 @@ def get_es_client() -> AsyncElasticsearch:
     )
 
 
+async def ensure_es_ready() -> None:
+    """
+    启动时健康检查 + 索引初始化：
+    - ping ES
+    - 若 regulations 索引不存在，则按当前代码使用字段创建最小可用 mapping
+    """
+
+    es = get_es_client()
+    ok = await es.ping()
+    if not ok:
+        raise RuntimeError("Elasticsearch ping failed.")
+
+    index_name = os.getenv("ES_REGULATIONS_INDEX", "regulations")
+    exists = await es.indices.exists(index=index_name)
+    if exists:
+        return
+
+    body = {
+        "settings": {
+            "index": {
+                "number_of_shards": int(os.getenv("ES_SHARDS", "1")),
+                "number_of_replicas": int(os.getenv("ES_REPLICAS", "0")),
+            }
+        },
+        "mappings": {
+            "dynamic": True,
+            "properties": {
+                "text": {"type": "text"},
+                "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                # metadata.* 在检索中被 multi_match 使用，保持 object + dynamic
+                "metadata": {"type": "object", "dynamic": True},
+            },
+        },
+    }
+    await es.indices.create(index=index_name, **{"body": body})
+
+
 __all__ = [
     "get_es_client",
+    "ensure_es_ready",
 ]
 

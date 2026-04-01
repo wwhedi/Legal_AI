@@ -5,8 +5,9 @@ from typing import Any, Dict, List, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from config.dashscope_config import ModelRegistry, get_dashscope_async_client
+from config.dashscope_config import ModelRegistry, create_chat_completion
 from rag.retrieval_pipeline import RetrievalPipeline
+from services.citation_verifier import CitationVerifier
 
 
 LegalIntent = Literal[
@@ -28,6 +29,8 @@ class LegalQAState(TypedDict, total=False):
     retrieved_docs: List[Dict[str, Any]]
     answer: str
     citations: List[Dict[str, Any]]
+    verification_details: List[Dict[str, Any]]
+    answer_needs_human_review: bool
 
 
 async def classify_intent(state: LegalQAState) -> LegalQAState:
@@ -111,17 +114,63 @@ async def generate_answer(state: LegalQAState) -> LegalQAState:
         + "\n\n请输出：\n1) 简明结论\n2) 法律依据（引用[编号]）\n3) 实务建议"
     )
 
+    verifier = CitationVerifier()
+    answer_needs_human_review = False
+    verification_details: List[Dict[str, Any]] = []
     try:
-        client = get_dashscope_async_client()
-        completion = await client.chat.completions.create(
-            model=ModelRegistry.TEXT_ROUTER,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+        answer = await create_chat_completion(
+            model=ModelRegistry.text_router(),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             temperature=0.1,
         )
-        answer = (completion.choices[0].message.content or "").strip()
+
+        # 强制引用校验闭环：
+        # 1) 先校验首轮回答中的显式引用；
+        # 2) 若存在未验证引用，基于检索原文要求模型重写，再次校验。
+        verify_results = await verifier.verify_citations(
+            llm_answer=answer,
+            retrieved_contexts=docs[:8],
+        )
+        verification_details = verify_results
+        unverified = [item for item in verify_results if not item.get("verified", False)]
+        if unverified:
+            invalid_refs = ", ".join(item.get("raw", "") for item in unverified if item.get("raw")) or "未知引用"
+            revise_user_prompt = (
+                f"原回答存在未通过校验的引用：{invalid_refs}\n"
+                "请仅基于下面证据重新生成回答，不得引用证据外法条。\n\n"
+                f"问题意图: {intent}\n"
+                f"用户问题: {question}\n\n"
+                "检索证据:\n"
+                + "\n\n".join(context_blocks)
+                + "\n\n请输出：\n1) 简明结论\n2) 法律依据（仅允许引用[编号]）\n3) 实务建议"
+            )
+            revised_answer = await create_chat_completion(
+                model=ModelRegistry.text_router(),
+                system_prompt=system_prompt,
+                user_prompt=revise_user_prompt,
+                temperature=0.0,
+            )
+            revised_verify = await verifier.verify_citations(
+                llm_answer=revised_answer,
+                retrieved_contexts=docs[:8],
+            )
+            answer = revised_answer
+            verify_results = revised_verify
+            verification_details = revised_verify
+            unverified = [item for item in verify_results if not item.get("verified", False)]
+            answer_needs_human_review = len(unverified) > 0
+
+        # 将校验结果挂回 citations，前端/调用方可直接观察闭环结果
+        verify_map = {item.get("raw"): item for item in verify_results}
+        for item in citations:
+            ref_id = item.get("ref_id")
+            v = verify_map.get(ref_id)
+            if v is not None:
+                item["verified"] = bool(v.get("verified", False))
+                item["verify_source"] = v.get("verify_source")
+        if verify_results and not answer_needs_human_review:
+            answer_needs_human_review = any(not it.get("verified", False) for it in verify_results)
     except Exception:
         # 降级输出，确保流程可用
         answer = (
@@ -129,8 +178,14 @@ async def generate_answer(state: LegalQAState) -> LegalQAState:
             "- 请优先核对引用条款的现行有效性与适用范围。\n"
             "- 当前回答为检索增强的草案，建议由法务复核。"
         )
+        answer_needs_human_review = True
 
-    return {"answer": answer, "citations": citations}
+    return {
+        "answer": answer,
+        "citations": citations,
+        "verification_details": verification_details,
+        "answer_needs_human_review": answer_needs_human_review,
+    }
 
 
 def build_legal_qa_graph():
