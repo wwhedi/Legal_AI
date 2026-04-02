@@ -65,15 +65,28 @@ async def ensure_milvus_ready() -> None:
                     collection_name=collection_name,
                     dimension=dense_dim,
                     primary_field_name="id",
+                    id_type="string",
                     vector_field_name="dense_vector",
+                    enable_dynamic_field=True,
                 )
                 return
             except TypeError:
                 # 旧签名兜底
-                milvus.create_collection(
-                    collection_name=collection_name,
-                    dimension=dense_dim,
-                )
+                try:
+                    milvus.create_collection(
+                        collection_name=collection_name,
+                        dimension=dense_dim,
+                        primary_field_name="id",
+                        id_type="string",
+                        vector_field_name="dense_vector",
+                        enable_dynamic_field=True,
+                    )
+                except TypeError:
+                    # 最后兜底：仅快速创建（可能不支持动态字段或字符串主键）
+                    milvus.create_collection(
+                        collection_name=collection_name,
+                        dimension=dense_dim,
+                    )
                 return
         raise RuntimeError("MilvusClient does not support create_collection; please upgrade pymilvus.")
 

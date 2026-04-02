@@ -17,6 +17,7 @@ import type {
   PendingRegulationViewItem,
   RegulationDiffData,
 } from "@/types";
+import { approveRegulationChange } from "@/services/api";
 
 function buildMockDiff(item: PendingRegulationItem): RegulationDiffData {
   const title = item.regulation_title || item.regulation_id;
@@ -41,6 +42,7 @@ export default function RegulationsPage() {
 
   const [rows, setRows] = useState<PendingRegulationViewItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     if (isDemo) {
@@ -69,15 +71,21 @@ export default function RegulationsPage() {
     [rows, selectedId],
   );
 
-  const approveToSuccess = (id: string) => {
-    setRows((prev) => {
-      const updated = prev.map((r) =>
-        r.id === id ? { ...r, uiStatus: "success" } : r,
-      );
-      const nextPending = updated.filter((r) => r.uiStatus === "pending_review");
-      setSelectedId(nextPending[0]?.id ?? null);
-      return updated;
-    });
+  const approveToSuccess = async (id: string) => {
+    if (isDemo) return;
+    if (approving) return;
+    try {
+      setApproving(true);
+      await approveRegulationChange(id);
+      setSelectedId(null);
+      // 以后端为准刷新 pending 列表（approved 的记录会从 /pending 中消失）
+      await query.refetch();
+    } catch (e) {
+      // 简化：这里不引入新的 toast 依赖，只在控制台打印错误
+      console.error(e);
+    } finally {
+      setApproving(false);
+    }
   };
 
   return (

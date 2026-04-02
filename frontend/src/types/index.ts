@@ -14,6 +14,7 @@ export interface Citation {
   /** article number extracted from metadata */
   article?: string | null;
   status?: string | null;
+  status_display?: string | null;
   score?: number | null;
   verified?: boolean;
   verify_source?: "retrieved_context" | "kb_fallback" | "unverified" | string;
@@ -138,6 +139,13 @@ export interface AskQAResponse {
   citations: Citation[];
   verification_details: Array<Record<string, unknown>>;
   answer_needs_human_review: boolean;
+}
+
+export interface ApproveRegulationResponse {
+  id: string;
+  regulation_id: string;
+  status: string;
+  indexed_chunk_count: number;
 }
 
 // --- API DTOs ---

@@ -20,6 +20,7 @@ from parsers.metadata_injector import inject_hierarchical_context
 from parsers.legal_parser_enhanced import FineGrainedLegalParser
 from services.embedding_service import EmbeddingService
 from services.regulation_change_detector import RegulationChangeDetector
+from models.chunk_schema import EffectiveStatus
 
 
 router = APIRouter(prefix="/regulations", tags=["regulations"])
@@ -136,6 +137,37 @@ def _chunk_canonical_id(regulation_id: str, chunk_text: str) -> str:
     return f"{regulation_id}:{digest}"
 
 
+def _map_sxx_to_effective_status(sxx: Any) -> EffectiveStatus:
+    """
+    flk 生命周期 sxx -> EffectiveStatus
+    - 4: 尚未生效 -> INVALID
+    - 3: 有效 -> VALID
+    - 2: 已修改 -> REVISED
+    - 1: 已废止 -> REPEALED
+    """
+    try:
+        n = int(sxx)
+    except Exception:
+        return EffectiveStatus.VALID
+    if n == 3:
+        return EffectiveStatus.VALID
+    if n == 2:
+        return EffectiveStatus.REVISED
+    if n == 1:
+        return EffectiveStatus.REPEALED
+    return EffectiveStatus.INVALID
+
+
+def _status_display_label(status: EffectiveStatus) -> str:
+    mapping = {
+        EffectiveStatus.VALID: "【有效】",
+        EffectiveStatus.REVISED: "【已修改】",
+        EffectiveStatus.REPEALED: "【已废止】",
+        EffectiveStatus.INVALID: "【尚未生效】",
+    }
+    return mapping.get(status, "【有效】")
+
+
 def _build_chunks_from_payload(payload: Dict[str, Any]) -> Tuple[str, Optional[str], List[Dict[str, Any]]]:
     """
     将法规 payload 统一归一为可索引的 chunk 列表。
@@ -149,6 +181,11 @@ def _build_chunks_from_payload(payload: Dict[str, Any]) -> Tuple[str, Optional[s
     regulation_id = str(payload.get("regulation_id") or payload.get("id") or payload.get("code") or "unknown_regulation")
     title = payload.get("title") or payload.get("regulation_title")
     law_title = str(title) if title is not None else None
+
+    # 章节/条文的有效性状态：优先用 sxx；没有则默认当作有效文本（保证演示与现行口径可跑通）
+    effective_status = _map_sxx_to_effective_status(payload.get("sxx"))
+    status_display = _status_display_label(effective_status)
+    status_value = effective_status.value
 
     clauses = payload.get("clauses")
     chunks: List[Dict[str, Any]] = []
@@ -179,6 +216,11 @@ def _build_chunks_from_payload(payload: Dict[str, Any]) -> Tuple[str, Optional[s
                 ),
                 "title": law_title,
                 "chunk_index": idx,
+                # 检索过滤与展示所需状态信息
+                "status": status_value,  # EN value: valid/revised/repealed/invalid
+                "status_display": status_display,  # CN label: 【有效】/【已修改】/【已废止】/【尚未生效】
+                "sxx": payload.get("sxx"),
+                "effective_status": status_value,
             }
             # 合并原 clause 层级字段，便于可解释与审计
             for k in ("bian", "zhang", "jie", "tiao", "kuan", "xiang"):
@@ -194,7 +236,16 @@ def _build_chunks_from_payload(payload: Dict[str, Any]) -> Tuple[str, Optional[s
                 {
                     "canonical_id": canonical_id,
                     "text": raw_text,
-                    "metadata": {"regulation_id": regulation_id, "law_name": law_title, "title": law_title, "chunk_index": 0},
+                    "metadata": {
+                        "regulation_id": regulation_id,
+                        "law_name": law_title,
+                        "title": law_title,
+                        "chunk_index": 0,
+                        "status": status_value,
+                        "status_display": status_display,
+                        "sxx": payload.get("sxx"),
+                        "effective_status": status_value,
+                    },
                 }
             ]
 

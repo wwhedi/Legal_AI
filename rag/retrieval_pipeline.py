@@ -32,9 +32,25 @@ class RetrievalPipeline:
         )
         sparse_task = asyncio.create_task(self._search_milvus_sparse(query, top_k=top_k * 3))
 
+        # 方案二：Sparse 不可用时允许降级
         es_results, dense_results, sparse_results = await asyncio.gather(
-            es_task, dense_task, sparse_task
+            es_task, dense_task, sparse_task, return_exceptions=True
         )
+        if isinstance(es_results, Exception):
+            es_results = []
+        if isinstance(dense_results, Exception):
+            dense_results = []
+        if isinstance(sparse_results, Exception):
+            sparse_results = []
+
+        # 默认只开放 VALID + REVISED；当用户显式询问历史/变迁/废止前时开放 REPEALED
+        allowed_statuses = {"valid", "revised"}
+        if self._query_requests_history(query):
+            allowed_statuses.add("repealed")
+
+        es_results = self._filter_by_effective_status(es_results, allowed_statuses)
+        dense_results = self._filter_by_effective_status(dense_results, allowed_statuses)
+        sparse_results = self._filter_by_effective_status(sparse_results, allowed_statuses)
 
         fused = self._rrf_fuse(
             ranked_lists=[es_results, dense_results, sparse_results],
@@ -145,6 +161,27 @@ class RetrievalPipeline:
 
         fused.sort(key=lambda x: x["rrf_score"], reverse=True)
         return fused
+
+    def _query_requests_history(self, query: str) -> bool:
+        q = (query or "").lower()
+        # 允许用户显式询问历史变迁/废止前
+        keywords = ("历史", "变迁", "变更", "废止前", "修改前", "曾经", "repealed", "repeal")
+        return any(kw.lower() in q for kw in keywords)
+
+    def _filter_by_effective_status(
+        self, items: List[Dict[str, Any]], allowed_statuses: set[str]
+    ) -> List[Dict[str, Any]]:
+        filtered: List[Dict[str, Any]] = []
+        for it in items:
+            meta = it.get("metadata") or {}
+            status = meta.get("status")
+            # 兼容：若 metadata 缺失状态，则保留以避免返回 0（生产中应尽量保证写入一致性）
+            if status is None:
+                filtered.append(it)
+                continue
+            if str(status).lower() in allowed_statuses:
+                filtered.append(it)
+        return filtered
 
 
 __all__ = ["RetrievalPipeline"]

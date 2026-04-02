@@ -84,6 +84,7 @@ async def generate_answer(state: LegalQAState) -> LegalQAState:
     citations: List[Dict[str, Any]] = []
     for i, doc in enumerate(docs[:8], start=1):
         meta = doc.get("metadata", {}) or {}
+        status_display = meta.get("status_display") or None
         citations.append(
             {
                 "ref_id": f"[{i}]",
@@ -91,10 +92,14 @@ async def generate_answer(state: LegalQAState) -> LegalQAState:
                 "law_name": meta.get("law_name"),
                 "article": meta.get("article_number"),
                 "status": meta.get("status"),
+                "status_display": status_display,
                 "score": doc.get("final_score", doc.get("rrf_score", 0.0)),
             }
         )
-        context_blocks.append(f"[{i}] {doc.get('text', '')}")
+        if status_display:
+            context_blocks.append(f"[{i}] {status_display}\n{doc.get('text', '')}")
+        else:
+            context_blocks.append(f"[{i}] {doc.get('text', '')}")
 
     if not context_blocks:
         return {

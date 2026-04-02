@@ -32,6 +32,7 @@ type CitationDetail = {
   ref_id: string;
   law_name: string;
   article: string;
+  evidence_status_display?: string;
   status: "Verified" | "Unverified";
   excerpt: string;
   verify_source?: string;
@@ -143,6 +144,7 @@ export default function ChatPage() {
             ref_id: c.ref_id,
             law_name: c.law_name ? `《${c.law_name}》` : "法规依据",
             article: c.article ? `第${c.article}条` : "条款待核验",
+            evidence_status_display: c.status_display || undefined,
             status: c.verified === false ? ("Unverified" as const) : ("Verified" as const),
             verify_source: c.verify_source,
             excerpt:
@@ -284,7 +286,8 @@ export default function ChatPage() {
                             onClick={() => setSelectedRef(c.ref_id)}
                           >
                             <Badge variant="secondary">
-                              {c.ref_id} {c.law_name} 第{c.article}条
+                              {c.ref_id} {c.law_name} 第{c.article}条{" "}
+                              {c.status_display ? c.status_display : ""}
                             </Badge>
                           </button>
                         ))}
@@ -349,6 +352,11 @@ export default function ChatPage() {
                   <div className="text-sm font-medium">
                     {citationDetails[selectedRef].law_name} {citationDetails[selectedRef].article}
                   </div>
+                  {citationDetails[selectedRef].evidence_status_display ? (
+                    <div className="text-xs text-slate-500">
+                      法律状态：{citationDetails[selectedRef].evidence_status_display}
+                    </div>
+                  ) : null}
                   {citationDetails[selectedRef].verify_source ? (
                     <div className="text-xs text-slate-500">
                       校验来源：{citationDetails[selectedRef].verify_source}
