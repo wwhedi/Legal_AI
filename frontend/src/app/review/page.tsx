@@ -56,7 +56,9 @@ export default function ReviewPage() {
     if (!isDemo) return;
     if (demoStatus !== "idle") return;
     if (threadId.startsWith("demo_review_")) {
-      setThreadId("");
+      queueMicrotask(() => {
+        setThreadId("");
+      });
     }
   }, [isDemo, demoStatus, threadId]);
 

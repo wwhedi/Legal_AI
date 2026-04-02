@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 import { fetchPendingRegulations } from "@/services/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DiffViewer } from "@/components/regulations/DiffViewer";
 import { RegulationList } from "@/components/regulations/RegulationList";
-import { ReviewActionBar } from "@/components/regulations/ReviewActionBar";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { DEMO_REGULATION_ROWS } from "@/demo/mock-data";
 import type {
@@ -17,7 +16,6 @@ import type {
   PendingRegulationViewItem,
   RegulationDiffData,
 } from "@/types";
-import { approveRegulationChange } from "@/services/api";
 
 function buildMockDiff(item: PendingRegulationItem): RegulationDiffData {
   const title = item.regulation_title || item.regulation_id;
@@ -32,6 +30,7 @@ function buildMockDiff(item: PendingRegulationItem): RegulationDiffData {
 }
 
 export default function RegulationsPage() {
+  const router = useRouter();
   const { isDemo } = useDemoMode();
   const query = useQuery({
     queryKey: ["pendingRegulations"],
@@ -40,60 +39,26 @@ export default function RegulationsPage() {
     refetchInterval: 8000,
   });
 
-  const [rows, setRows] = useState<PendingRegulationViewItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [approving, setApproving] = useState(false);
-
-  useEffect(() => {
-    if (isDemo) {
-      setRows(DEMO_REGULATION_ROWS);
-      setSelectedId(DEMO_REGULATION_ROWS[0]?.id ?? null);
-      return;
-    }
-    if (!query.data) return;
-    const nextRows: PendingRegulationViewItem[] = query.data.items.map((item) => ({
+  const rows = useMemo<PendingRegulationViewItem[]>(() => {
+    if (isDemo) return DEMO_REGULATION_ROWS;
+    if (!query.data) return [];
+    return query.data.items.map((item) => ({
       ...item,
       uiStatus: "pending_review",
       diff: buildMockDiff(item),
     }));
-    setRows(nextRows);
-    if (!selectedId && nextRows.length > 0) {
-      setSelectedId(nextRows[0].id);
-    }
-  }, [isDemo, query.data, selectedId]);
+  }, [isDemo, query.data]);
 
   const pendingRows = useMemo(
     () => rows.filter((r) => r.uiStatus === "pending_review"),
     [rows],
   );
-  const selected = useMemo(
-    () => rows.find((r) => r.id === selectedId) ?? null,
-    [rows, selectedId],
-  );
-
-  const approveToSuccess = async (id: string) => {
-    if (isDemo) return;
-    if (approving) return;
-    try {
-      setApproving(true);
-      await approveRegulationChange(id);
-      setSelectedId(null);
-      // 以后端为准刷新 pending 列表（approved 的记录会从 /pending 中消失）
-      await query.refetch();
-    } catch (e) {
-      // 简化：这里不引入新的 toast 依赖，只在控制台打印错误
-      console.error(e);
-    } finally {
-      setApproving(false);
-    }
-  };
-
   return (
     <div className="p-6">
       <div className="mb-4">
         <h1 className="text-2xl font-semibold">法规动态库</h1>
         <p className="text-sm text-slate-600">
-          待审核法规更新列表 + 旧新条文对比 + AI 修订要点 + 审核入库操作（Demo）。
+          待审核法规更新列表。点击任一卡片进入独立详情页查看旧法条、AI 修订要点、新法条及审核操作。
         </p>
         {isDemo ? (
           <Badge className="mt-2 bg-violet-600 hover:bg-violet-600">Demo Mode</Badge>
@@ -116,43 +81,26 @@ export default function RegulationsPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-        <Card className="border-slate-200 bg-white/80 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Pending Review</CardTitle>
-            <Badge>{pendingRows.length} 条</Badge>
-          </CardHeader>
-          <CardContent>
-            {pendingRows.length > 0 ? (
-              <RegulationList
-                items={pendingRows}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
-            ) : (
-              <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-                当前没有待审核法规记录（可能都已标记为 Success）。
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          {selected ? (
-            <>
-              <DiffViewer diff={selected.diff} />
-              <ReviewActionBar item={selected} onApprove={approveToSuccess} />
-            </>
+      <Card className="border-slate-100 bg-white shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
+          <CardTitle className="text-base font-semibold text-slate-900">待审核</CardTitle>
+          <Badge variant="secondary" className="bg-slate-100 font-normal text-slate-700">
+            {pendingRows.length} 条
+          </Badge>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {pendingRows.length > 0 ? (
+            <RegulationList
+              items={pendingRows}
+              onOpen={(id) => router.push(`/regulations/${id}`)}
+            />
           ) : (
-            <Alert>
-              <AlertTitle>未选中条目</AlertTitle>
-              <AlertDescription>
-                请从左侧 Pending Review 列表选择一个法规变更条目查看对比详情。
-              </AlertDescription>
-            </Alert>
+            <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+              当前没有待审核法规记录（可能都已标记为 Success）。
+            </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -5,9 +5,9 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Bot, FileSearch, Scale } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/review", label: "智能合规审查", icon: Scale },
   { href: "/regulations", label: "法规动态库", icon: FileSearch },
   { href: "/chat", label: "法律 AI 助手", icon: Bot },
+  { href: "/review", label: "智能合规审查", icon: Scale },
 ] as const;
 
 export function AppSidebar() {
@@ -16,13 +16,11 @@ export function AppSidebar() {
   const query = searchParams.toString();
 
   return (
-    <aside className="w-72 shrink-0 border-r border-slate-800 bg-slate-950 text-slate-100">
-      <div className="flex h-16 items-center border-b border-slate-800 px-5">
-        <div className="text-sm font-semibold tracking-wide text-slate-200">
-          Legal AI Console
-        </div>
+    <aside className="flex w-14 shrink-0 flex-col border-r border-slate-800/90 bg-slate-950 text-slate-100">
+      <div className="flex h-12 items-center justify-center border-b border-slate-800">
+        <div className="text-[10px] font-bold tracking-tight text-blue-300">AI</div>
       </div>
-      <nav className="space-y-1 p-3">
+      <nav className="flex flex-1 flex-col gap-1 p-2">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
@@ -30,14 +28,14 @@ export function AppSidebar() {
             <Link
               key={item.href}
               href={query ? `${item.href}?${query}` : item.href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+              title={item.label}
+              className={`flex items-center justify-center rounded-lg p-2.5 transition-colors ${
                 active
-                  ? "bg-blue-600/20 text-blue-200 ring-1 ring-blue-400/40"
-                  : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                  ? "bg-blue-600/25 text-blue-100 ring-1 ring-blue-400/50"
+                  : "text-slate-400 hover:bg-slate-900 hover:text-white"
               }`}
             >
-              <Icon className="size-4" />
-              <span>{item.label}</span>
+              <Icon className="size-5" />
             </Link>
           );
         })}
@@ -45,4 +43,3 @@ export function AppSidebar() {
     </aside>
   );
 }
-
