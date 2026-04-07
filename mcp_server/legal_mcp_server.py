@@ -4,8 +4,8 @@ from typing import Any, Dict, List
 
 from mcp.server.fastmcp import FastMCP
 
-from rag.retrieval_pipeline import RetrievalPipeline
 from services.citation_verifier import CitationVerifier
+from services.farui_service import FaruiLegalService
 
 
 mcp = FastMCP("legal-ai-mcp")
@@ -18,8 +18,17 @@ async def search_regulations(query: str, top_k: int = 10) -> Dict[str, Any]:
     """
 
     top_k = max(1, min(top_k, 50))
-    pipeline = RetrievalPipeline()
-    results = await pipeline.retrieve(query=query, top_k=top_k)
+    farui = FaruiLegalService()
+    context = await farui.search_legal_context(query)
+    results = [
+        {
+            "id": "farui_context",
+            "text": context,
+            "metadata": {"source": "farui"},
+            "source": "farui",
+            "score": 1.0,
+        }
+    ]
     return {
         "query": query,
         "top_k": top_k,
@@ -40,12 +49,21 @@ async def check_clause_compliance(
     """
 
     top_k = max(1, min(top_k, 50))
-    pipeline = RetrievalPipeline()
+    farui = FaruiLegalService()
     verifier = CitationVerifier()
 
     # 将条款正文与可选引用串联，提升召回准确度
     query = clause_text if not references.strip() else f"{clause_text}\n引用:{references}"
-    contexts = await pipeline.retrieve(query=query, top_k=top_k)
+    context_text = await farui.search_legal_context(query)
+    contexts = [
+        {
+            "id": "farui_context",
+            "text": context_text,
+            "metadata": {"source": "farui"},
+            "source": "farui",
+            "score": 1.0,
+        }
+    ]
 
     answer_like_text = f"{clause_text}\n{references}".strip()
     citation_checks = await verifier.verify_citations(

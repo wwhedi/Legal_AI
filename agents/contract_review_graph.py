@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
-from rag.retrieval_pipeline import RetrievalPipeline
+from services.farui_service import FaruiLegalService
 
 
 class ContractReviewState(TypedDict, total=False):
@@ -85,11 +85,25 @@ async def search_regulations(state: ContractReviewState) -> ContractReviewState:
     if not clauses:
         return {"regulation_candidates": []}
 
-    pipeline = RetrievalPipeline()
-    # 为控制成本，这里仅拼接前若干条款作为检索 query 骨架
+    farui = FaruiLegalService()
     query = "；".join(item.get("text", "") for item in clauses[:5])
-    results = await pipeline.retrieve(query=query, top_k=15)
-    return {"regulation_candidates": results}
+    try:
+        context = await farui.search_legal_context(query)
+    except Exception:
+        context = ""
+    if not context:
+        return {"regulation_candidates": []}
+    return {
+        "regulation_candidates": [
+            {
+                "id": "farui_context",
+                "text": context,
+                "metadata": {"source": "farui"},
+                "source": "farui",
+                "score": 1.0,
+            }
+        ]
+    }
 
 
 async def assess_risks(state: ContractReviewState) -> ContractReviewState:

@@ -159,7 +159,7 @@ export function ChatHistorySidebar() {
           </div>
           <div className="min-w-0 flex-1 text-xs text-slate-600">
             <div className="font-medium text-slate-800">访客</div>
-            <Link href="/regulations" className="text-slate-500 hover:text-slate-700">
+            <Link href="/review" className="text-slate-500 hover:text-slate-700">
               返回工作台
             </Link>
           </div>

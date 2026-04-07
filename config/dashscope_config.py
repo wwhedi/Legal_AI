@@ -48,12 +48,27 @@ class ModelRegistry:
     """
 
     @classmethod
-    def core_reasoning(cls) -> str:
+    def reasoning(cls) -> str:
         provider = get_model_provider()
         if provider == LLMProvider.DASHSCOPE:
-            return os.getenv("DASHSCOPE_CORE_REASONING_MODEL", "qwen3-max")
-        # DeepSeek R1 (Reasoner)
+            return os.getenv("REASONING_MODEL_NAME", "qwen-max")
         return os.getenv("DEEPSEEK_CORE_REASONING_MODEL", "deepseek-reasoner")
+
+    @classmethod
+    def legal_retriever(cls) -> str:
+        provider = get_model_provider()
+        if provider == LLMProvider.DASHSCOPE:
+            return os.getenv("FARUI_MODEL_NAME", "tongyi-farui")
+        # 非 DashScope Provider 下保留兼容（可通过环境变量覆盖）
+        return os.getenv("FARUI_MODEL_NAME", cls.text_router())
+
+    @classmethod
+    def core_reasoning(cls) -> str:
+        # Backward compatibility: 历史命名对齐到 reasoning()
+        provider = get_model_provider()
+        if provider == LLMProvider.DASHSCOPE:
+            return os.getenv("DASHSCOPE_CORE_REASONING_MODEL", cls.reasoning())
+        return cls.reasoning()
 
     @classmethod
     def text_router(cls) -> str:
@@ -84,6 +99,8 @@ class ModelRegistry:
     def as_dict(cls) -> Dict[str, str]:
         return {
             "provider": get_model_provider(),
+            "reasoning": cls.reasoning(),
+            "legal_retriever": cls.legal_retriever(),
             "core_reasoning": cls.core_reasoning(),
             "text_router": cls.text_router(),
             "embedding": cls.embedding(),
@@ -107,6 +124,14 @@ def get_llm_async_client() -> AsyncOpenAI:
         api_key=api_key,
         base_url=base_url,
     )
+
+
+def get_farui_temperature() -> float:
+    return float(os.getenv("FARUI_TEMPERATURE", "0.01"))
+
+
+def get_reasoning_temperature() -> float:
+    return float(os.getenv("REASONING_TEMPERATURE", "0.3"))
 
 
 def _should_strip_system_prompt(provider: str, model: str) -> bool:
@@ -163,5 +188,7 @@ __all__ = [
     "get_llm_async_client",
     "create_chat_completion",
     "get_dashscope_async_client",
+    "get_farui_temperature",
+    "get_reasoning_temperature",
 ]
 

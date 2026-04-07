@@ -3,16 +3,13 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Set
 
-from config.db_elasticsearch import get_es_client
-
 
 class CitationVerifier:
     """
     引用校验器：
     1) 从 LLM 回答中提取引用
     2) 与检索上下文进行匹配校验
-    3) 若未命中上下文，执行知识库兜底查询
-    4) 为每条引用输出 verified 标记
+    3) 为每条引用输出 verified 标记
     """
 
     # 例如：根据[1]、见[2]
@@ -56,25 +53,13 @@ class CitationVerifier:
                 )
                 continue
 
-            fallback_hit = await self._kb_fallback_lookup(citation)
-            if fallback_hit:
-                verified_results.append(
-                    {
-                        **citation,
-                        "verified": True,
-                        "verify_source": "kb_fallback",
-                        "matched_context_id": fallback_hit.get("_id"),
-                        "fallback_evidence": fallback_hit.get("_source", {}),
-                    }
-                )
-            else:
-                verified_results.append(
-                    {
-                        **citation,
-                        "verified": False,
-                        "verify_source": "unverified",
-                    }
-                )
+            verified_results.append(
+                {
+                    **citation,
+                    "verified": False,
+                    "verify_source": "unverified",
+                }
+            )
 
         return verified_results
 
@@ -161,49 +146,6 @@ class CitationVerifier:
                     return ctx
 
         return None
-
-    async def _kb_fallback_lookup(self, citation: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        未在当前上下文命中时，去知识库做一次轻量查库兜底。
-        """
-
-        es = get_es_client()
-        ctype = citation.get("citation_type")
-
-        if ctype == "bracket_ref":
-            # bracket 引用缺少语义内容，无法直接精准查库
-            return None
-
-        if ctype == "law_article":
-            law_name = citation.get("law_name")
-            article = citation.get("article_number")
-            should_clauses: List[Dict[str, Any]] = []
-            if law_name:
-                should_clauses.append({"match": {"metadata.law_name": law_name}})
-            if article:
-                should_clauses.append({"match": {"metadata.article_number": article}})
-                should_clauses.append({"match_phrase": {"text": f"第{article}条"}})
-
-            if not should_clauses:
-                return None
-
-            query = {"bool": {"should": should_clauses, "minimum_should_match": 1}}
-        else:
-            raw = citation.get("raw", "")
-            if not raw:
-                return None
-            query = {"multi_match": {"query": raw, "fields": ["text", "metadata.*"]}}
-
-        try:
-            resp = await es.search(
-                index="regulations",
-                body={"size": 1, "query": query},
-            )
-            hits = resp.get("hits", {}).get("hits", [])
-            return hits[0] if hits else None
-        except Exception:
-            # 查库失败时，不抛异常影响主流程，直接视为未校验通过
-            return None
 
     def _normalize_article_number(self, article: str) -> str:
         return re.sub(r"\D+", "", article or "")

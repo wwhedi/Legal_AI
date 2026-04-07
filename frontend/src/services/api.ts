@@ -1,10 +1,8 @@
 import type {
   AskQARequest,
   AskQAResponse,
-  ApproveRegulationResponse,
   ApproveReviewRequest,
   ApproveReviewResponse,
-  PendingRegulationResponse,
   ReviewStatusResponse,
   SubmitReviewRequest,
   SubmitReviewResponse,
@@ -79,30 +77,6 @@ export async function approveReview(
   return request<ApproveReviewResponse>(`/review/approve/${threadId}`, {
     method: "POST",
     json: payload,
-    signal: options?.signal,
-  });
-}
-
-export async function fetchPendingRegulations(
-  options?: { signal?: AbortSignal; limit?: number; offset?: number },
-): Promise<PendingRegulationResponse> {
-  const limit = options?.limit ?? 50;
-  const offset = options?.offset ?? 0;
-  return request<PendingRegulationResponse>(
-    `/regulations/pending?limit=${limit}&offset=${offset}`,
-    {
-      method: "GET",
-      signal: options?.signal,
-    },
-  );
-}
-
-export async function approveRegulationChange(
-  regulationId: string,
-  options?: { signal?: AbortSignal },
-): Promise<ApproveRegulationResponse> {
-  return request<ApproveRegulationResponse>(`/regulations/${regulationId}/approve`, {
-    method: "POST",
     signal: options?.signal,
   });
 }

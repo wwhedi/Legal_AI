@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Bot, FileSearch, Scale } from "lucide-react";
+import { Bot, Scale } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/regulations", label: "法规动态库", icon: FileSearch },
   { href: "/chat", label: "法律 AI 助手", icon: Bot },
   { href: "/review", label: "智能合规审查", icon: Scale },
 ] as const;
